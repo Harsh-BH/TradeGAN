@@ -1,3 +1,13 @@
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+import random
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy.random as rnd
+
 def FinGAN_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later = True, lrg = 0.0001, lrd = 0.0001, n_epochs = 500, ngrad = 100, h = 1, l = 10, pred = 1, ngpu = 1, tanh_coeff = 100, tr = 0.8, vl = 0.1, z_dim = 32, hid_d = 64, hid_g = 8, checkpoint_epoch = 20, batch_size = 100, diter = 1, plot = False, freq = 2):
     """
     FinGAN: looking at all combinations, performance on both validation and test set for all

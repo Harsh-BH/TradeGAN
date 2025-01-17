@@ -5,3 +5,4 @@ torch
 matplotlib
 seaborn
 scikit-learn
+yfinance

@@ -69,56 +69,109 @@ def excessreturns_closeonly(dataloc, stock, etf, plotcheck = False):
         plt.show()
     return excessret, dates_dt[1:]
 
-def excessreturns(dataloc, stock, etf, plotcheck = False):
+def excessreturns(dataloc, stock, etf, plotcheck=False):
     """
-    function to get a time series of alternating close and open
-    etf-excess log returns for a given stock
-    all prices are adjusted for stock events
-    input: location of datasets, stock ticker, etf ticker
-    output: time series of etf excess log returns
-    optional: plot sanity check
+    Generates a time series of ETF-excess log returns for a given stock.
+    The function computes alternating open and close log returns, caps extreme returns,
+    and optionally plots the data for sanity checks.
+
+    Parameters:
+    -----------
+    dataloc : str
+        Directory path where the CSV files are located. Ensure it ends with a '/'.
+    stock : str
+        Ticker symbol of the stock (e.g., 'TCS').
+    etf : str
+        Ticker symbol of the corresponding ETF (e.g., '^CNXIT').
+    plotcheck : bool, optional
+        If True, generates plots for the stock price and returns (default is False).
+
+    Returns:
+    --------
+    excessret : np.ndarray
+        Array of ETF-excess log returns.
+    dates_dt : pd.DatetimeIndex
+        Corresponding dates for the returns.
     """
-    s_df = pd.read_csv(dataloc+stock+".csv")
-    e_df = pd.read_csv(dataloc+etf+".csv")
-    dates_dt = pd.to_datetime(s_df['date'])
-    d1 = pd.to_datetime("2022-01-01")
-    smp = (dates_dt < d1)
-    s_df = s_df[smp]
-    dates_dt = pd.to_datetime(s_df['date'])
-    e_df = e_df[smp]
-    s_logclose = np.log(s_df['AdjClose'])
-    e_logclose = np.log(e_df['AdjClose'])
-    s_logopen = np.log(s_df['AdjOpen'])
-    e_logopen = np.log(e_df['AdjOpen'])
-    s_log = np.zeros(2*len(s_logclose))
-    e_log = np.zeros(2*len(s_logclose))
-    for i in range(len(s_logclose)):
-        s_log[2 * i] = s_logopen[i]
-        s_log[2 * i + 1] = s_logclose[i]
-        e_log[2 * i] = e_logopen[i]
-        e_log[2 * i + 1] = e_logclose[i]
+
+    # Define the cutoff date
+    cutoff_date = pd.Timestamp("2022-01-01")
+
+    # Read CSV files with date parsing for efficiency
+    try:
+        s_df = pd.read_csv(f"{dataloc}{stock}.csv", parse_dates=['date'])
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Stock file '{dataloc}{stock}.csv' not found.")
+
+    try:
+        e_df = pd.read_csv(f"{dataloc}{etf}.csv", parse_dates=['date'])
+    except FileNotFoundError:
+        raise FileNotFoundError(f"ETF file '{dataloc}{etf}.csv' not found.")
+
+    # Merge DataFrames on 'date' to ensure alignment
+    merged_df = pd.merge(
+        s_df[s_df['date'] < cutoff_date],
+        e_df[e_df['date'] < cutoff_date],
+        on='date',
+        suffixes=('_stock', '_etf')
+    ).reset_index(drop=True)
+
+    # Check if merge was successful
+    if merged_df.empty:
+        raise ValueError(f"No overlapping dates found for stock '{stock}' and ETF '{etf}' before {cutoff_date}.")
+
+    # Extract necessary columns as NumPy arrays for efficient processing
+    s_logclose = np.log(merged_df['AdjClose_stock'].values)
+    e_logclose = np.log(merged_df['AdjClose_etf'].values)
+    s_logopen = np.log(merged_df['AdjOpen_stock'].values)
+    e_logopen = np.log(merged_df['AdjOpen_etf'].values)
+
+    # Interleave open and close log prices using vectorized operations
+    s_log = np.empty(2 * len(s_logclose))
+    e_log = np.empty(2 * len(e_logclose))
+    s_log[0::2] = s_logopen
+    s_log[1::2] = s_logclose
+    e_log[0::2] = e_logopen
+    e_log[1::2] = e_logclose
+
+    # Calculate log returns
     s_ret = np.diff(s_log)
     e_ret = np.diff(e_log)
-    s_ret[s_ret > 0.15] = 0.15
-    s_ret[s_ret < -0.15] = -0.15
-    e_ret[e_ret > 0.15] = 0.15
-    e_ret[e_ret < -0.15] = -0.15
+
+    # Cap returns to mitigate the effect of outliers
+    cap_value = 0.15
+    s_ret = np.clip(s_ret, -cap_value, cap_value)
+    e_ret = np.clip(e_ret, -cap_value, cap_value)
+
+    # Calculate ETF-excess returns
     excessret = s_ret - e_ret
-    dates_dt = pd.to_datetime(s_df['date'])
+
+    # Align dates: since returns are based on differences, exclude the first date
+    dates_dt = merged_df['date'].iloc[1:].reset_index(drop=True)
+
     if plotcheck:
-        plt.figure(stock+" price")
-        plt.title(stock+" price")
-        plt.plot(dates_dt,s_df['AdjClose'])
-        plt.xlabel("date")
-        plt.ylabel("price in USD")
-        plt.show()
-        plt.figure("Returns "+stock)
-        plt.title("Returns "+stock)
-        plt.plot(range(len(s_ret)),s_ret, alpha = 0.7, label = 'stock')
-        plt.plot(range(len(e_ret)),e_ret, alpha = 0.7, label = 'etf')
-        plt.plot(range(len(e_ret)),excessret, alpha = 0.7, label = 'excess return')
+        # Plot Adjusted Close Price
+        plt.figure(figsize=(14, 6))
+        plt.plot(merged_df['date'], merged_df['AdjClose_stock'], label=f'{stock} AdjClose', color='blue')
+        plt.title(f'{stock} Adjusted Close Price')
+        plt.xlabel('Date')
+        plt.ylabel('Price')
         plt.legend()
+        plt.grid(True)
         plt.show()
+
+        # Plot Returns
+        plt.figure(figsize=(14, 6))
+        plt.plot(dates_dt, s_ret, alpha=0.7, label='Stock Returns', color='green')
+        plt.plot(dates_dt, e_ret, alpha=0.7, label='ETF Returns', color='orange')
+        plt.plot(dates_dt, excessret, alpha=0.7, label='Excess Returns', color='red')
+        plt.title(f'Returns for {stock} vs {etf}')
+        plt.xlabel('Date')
+        plt.ylabel('Log Return')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
     return excessret, dates_dt
 
 def rawreturns(dataloc, stock, plotcheck = False):
@@ -2463,7 +2516,7 @@ def FinGAN_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later =
     pd.DataFrame(PnL_test[0]).to_csv(loc+"PnLs/"+ticker+"-FinGAN-"+losstype+".csv")
     plt.figure("Cummulative PnL "+ticker)
     plt.title("Cummulative PnL "+ticker)
-    plt.grid(b = True)
+    plt.grid(visible=True)
     plt.xlabel("date")
     plt.xticks(rotation=45)
     plt.ylabel("bpts")
@@ -2473,7 +2526,7 @@ def FinGAN_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later =
     if (test_data.shape[0] % 2 == 0):
         plt.figure("Intraday cummulative PnL "+ticker)
         plt.title("Intraday cummulative PnL "+ticker)
-        plt.grid(b=True)
+        plt.grid(visible=True)
         plt.xlabel("date")
         plt.xticks(rotation=45)
 
@@ -2485,7 +2538,7 @@ def FinGAN_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later =
         plt.title("Overnight cummulative PnL "+ticker)
         plt.xlabel("date")
         plt.xticks(rotation=45)
-        plt.grid(b=True)
+        plt.grid(visible=True)
 
         plt.ylabel("bpts")
         plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnL_even), label = "PnL")
@@ -2493,7 +2546,7 @@ def FinGAN_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later =
     else:
         plt.figure("Overnight cummulative PnL "+ticker)
         plt.title("Overnight cummulative PnL "+ticker)
-        plt.grid(b=True)
+        plt.grid(visible=True)
         plt.xlabel("date")
         plt.xticks(rotation=45)
         plt.ylabel("bpts")
@@ -2505,7 +2558,7 @@ def FinGAN_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later =
         plt.title("Intraday cummulative PnL "+ticker)
         plt.xlabel("date")
         plt.xticks(rotation=45)
-        plt.grid(b=True)
+        plt.grid(visible=True)
         plt.ylabel("bpts")
 
         plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnL_even), label = "PnL")
@@ -2516,7 +2569,7 @@ def FinGAN_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later =
     plt.hist(distcheck_test,alpha = 0.5, bins=50,density = True, stacked=True, label = "PnL")
     plt.xlabel("excess return")
     plt.ylabel("density")
-    plt.grid(b=True)
+    plt.grid(visible=True)
     plt.legend(loc='best')
     plt.axvline(rl_test, color='k', linestyle='dashed', linewidth = 2)
 
@@ -2527,7 +2580,7 @@ def FinGAN_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later =
     plt.xlabel("excess return")
     plt.ylabel("density")
     plt.legend(loc='best')
-    plt.grid(b=True)
+    plt.grid(visible=True)
 
 
     print("PnL MSE")
@@ -3661,7 +3714,7 @@ def LSTM_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later = T
     pd.DataFrame(PnL_test[0]).to_csv(loc+"PnLs/"+ticker+"-LSTM-"+losstype+".csv")
     plt.figure("Cummulative PnL "+ticker)
     plt.title("Cummulative PnL "+ticker)
-    plt.grid(b = True)
+    plt.grid(visible=True)
     plt.xlabel("date")
     plt.xticks(rotation=45)
     plt.ylabel("bpts")
@@ -3671,7 +3724,7 @@ def LSTM_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later = T
     if (test_data.shape[0] % 2 == 0):
         plt.figure("Intraday cummulative PnL "+ticker)
         plt.title("Intraday cummulative PnL "+ticker)
-        plt.grid(b=True)
+        plt.grid(visible=True)
         plt.xlabel("date")
         plt.xticks(rotation=45)
 
@@ -3683,7 +3736,7 @@ def LSTM_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later = T
         plt.title("Overnight cummulative PnL "+ticker)
         plt.xlabel("date")
         plt.xticks(rotation=45)
-        plt.grid(b=True)
+        plt.grid(visible=True)
 
         plt.ylabel("bpts")
         plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnL_even), label = "PnL")
@@ -3691,7 +3744,7 @@ def LSTM_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later = T
     else:
         plt.figure("Overnight cummulative PnL "+ticker)
         plt.title("Overnight cummulative PnL "+ticker)
-        plt.grid(b=True)
+        plt.grid(visible=True)
         plt.xlabel("date")
         plt.xticks(rotation=45)
         plt.ylabel("bpts")
@@ -3703,7 +3756,7 @@ def LSTM_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later = T
         plt.title("Intraday cummulative PnL "+ticker)
         plt.xlabel("date")
         plt.xticks(rotation=45)
-        plt.grid(b=True)
+        plt.grid(visible=True)
         plt.ylabel("bpts")
 
         plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnL_even), label = "PnL")
@@ -3939,7 +3992,7 @@ def FinGAN_universal(tickers1, other,loc,modelsloc,plotsloc,dataloc, etflistloc,
     plt.figure(" portfolio cumPnL- "+ f_name)
     plt.title("Portfolio cummulative PnL " )
     plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[0]),label=losstype)
-    plt.grid(b=True)
+    plt.grid(visible=True)
     plt.ylabel("bpts")
     plt.legend(loc='best')
 

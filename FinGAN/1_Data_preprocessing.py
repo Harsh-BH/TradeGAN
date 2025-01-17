@@ -58,56 +58,100 @@ def excessreturns_closeonly(dataloc, stock, etf, plotcheck = False):
         plt.show()
     return excessret, dates_dt[1:]
 
-def excessreturns(dataloc, stock, etf, plotcheck = False):
+
+def excessreturns(dataloc, stock, etf, plotcheck=False):
     """
-    function to get a time series of alternating close and open
-    etf-excess log returns for a given stock
-    all prices are adjusted for stock events
-    input: location of datasets, stock ticker, etf ticker
-    output: time series of etf excess log returns
-    optional: plot sanity check
+    Generates a time series of ETF-excess log returns for a given stock.
+    The function computes alternating open and close log returns, caps extreme returns,
+    and optionally plots the data for sanity checks.
+
+    Parameters:
+    -----------
+    dataloc : str
+        Directory path where the CSV files are located.
+    stock : str
+        Ticker symbol of the stock.
+    etf : str
+        Ticker symbol of the corresponding ETF.
+    plotcheck : bool, optional
+        If True, generates plots for the stock price and returns (default is False).
+
+    Returns:
+    --------
+    excessret : np.ndarray
+        Array of ETF-excess log returns.
+    dates_dt : pd.DatetimeIndex
+        Corresponding dates for the returns.
     """
-    s_df = pd.read_csv(dataloc+stock+".csv")
-    e_df = pd.read_csv(dataloc+etf+".csv")
-    dates_dt = pd.to_datetime(s_df['date'])
-    d1 = pd.to_datetime("2022-01-01")
-    smp = (dates_dt < d1)
-    s_df = s_df[smp]
-    dates_dt = pd.to_datetime(s_df['date'])
-    e_df = e_df[smp]
-    s_logclose = np.log(s_df['AdjClose'])
-    e_logclose = np.log(e_df['AdjClose'])
-    s_logopen = np.log(s_df['AdjOpen'])
-    e_logopen = np.log(e_df['AdjOpen'])
-    s_log = np.zeros(2*len(s_logclose))
-    e_log = np.zeros(2*len(s_logclose))
-    for i in range(len(s_logclose)):
-        s_log[2 * i] = s_logopen[i]
-        s_log[2 * i + 1] = s_logclose[i]
-        e_log[2 * i] = e_logopen[i]
-        e_log[2 * i + 1] = e_logclose[i]
+
+    # Define the cutoff date
+    cutoff_date = pd.Timestamp("2022-01-01")
+
+    # Read CSV files with date parsing for efficiency
+    s_df = pd.read_csv(f"{dataloc}{stock}.csv", parse_dates=['date'])
+    e_df = pd.read_csv(f"{dataloc}{etf}.csv", parse_dates=['date'])
+
+    # Filter data before the cutoff date and reset indices
+    mask = s_df['date'] < cutoff_date
+    s_df = s_df.loc[mask].reset_index(drop=True)
+    e_df = e_df.loc[mask].reset_index(drop=True)
+
+    # Ensure both DataFrames have the same length after filtering
+    if len(s_df) != len(e_df):
+        raise ValueError(f"Mismatch in data lengths after filtering for {stock} and {etf}.")
+
+    # Compute log of Adjusted Close and Adjusted Open prices
+    s_logclose = np.log(s_df['AdjClose'].values)
+    e_logclose = np.log(e_df['AdjClose'].values)
+    s_logopen = np.log(s_df['AdjOpen'].values)
+    e_logopen = np.log(e_df['AdjOpen'].values)
+
+    # Interleave open and close log prices using vectorized operations
+    s_log = np.empty(2 * len(s_logclose))
+    e_log = np.empty(2 * len(e_logclose))
+    s_log[0::2] = s_logopen
+    s_log[1::2] = s_logclose
+    e_log[0::2] = e_logopen
+    e_log[1::2] = e_logclose
+
+    # Calculate log returns
     s_ret = np.diff(s_log)
     e_ret = np.diff(e_log)
-    s_ret[s_ret > 0.15] = 0.15
-    s_ret[s_ret < -0.15] = -0.15
-    e_ret[e_ret > 0.15] = 0.15
-    e_ret[e_ret < -0.15] = -0.15
+
+    # Cap returns to mitigate the effect of outliers
+    cap_value = 0.15
+    s_ret = np.clip(s_ret, -cap_value, cap_value)
+    e_ret = np.clip(e_ret, -cap_value, cap_value)
+
+    # Calculate ETF-excess returns
     excessret = s_ret - e_ret
-    dates_dt = pd.to_datetime(s_df['date'])
+
+    # Align dates: since returns are based on differences, exclude the first date
+    dates_dt = s_df['date'].iloc[1:].reset_index(drop=True)
+
     if plotcheck:
-        plt.figure(stock+" price")
-        plt.title(stock+" price")
-        plt.plot(dates_dt,s_df['AdjClose'])
-        plt.xlabel("date")
-        plt.ylabel("price in USD")
-        plt.show()
-        plt.figure("Returns "+stock)
-        plt.title("Returns "+stock)
-        plt.plot(range(len(s_ret)),s_ret, alpha = 0.7, label = 'stock')
-        plt.plot(range(len(e_ret)),e_ret, alpha = 0.7, label = 'etf')
-        plt.plot(range(len(e_ret)),excessret, alpha = 0.7, label = 'excess return')
+        # Plot Adjusted Close Price
+        plt.figure(figsize=(14, 6))
+        plt.plot(s_df['date'], s_df['AdjClose'], label=f'{stock} AdjClose', color='blue')
+        plt.title(f'{stock} Adjusted Close Price')
+        plt.xlabel('Date')
+        plt.ylabel('Price')
         plt.legend()
+        plt.grid(True)
         plt.show()
+
+        # Plot Returns
+        plt.figure(figsize=(14, 6))
+        plt.plot(dates_dt, s_ret, alpha=0.7, label='Stock Returns', color='green')
+        plt.plot(dates_dt, e_ret, alpha=0.7, label='ETF Returns', color='orange')
+        plt.plot(dates_dt, excessret, alpha=0.7, label='Excess Returns', color='red')
+        plt.title(f'Returns for {stock} vs {etf}')
+        plt.xlabel('Date')
+        plt.ylabel('Log Return')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
     return excessret, dates_dt
 
 def rawreturns(dataloc, stock, plotcheck = False):
