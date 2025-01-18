@@ -18,7 +18,6 @@ modelsloc = loc + "TrainedModels/"
 plotsloc = loc + "Plots/"
 resultsloc = loc + "Results/"
 
-# Model Parameters
 tanh_coeff = 100
 z_dim = 8
 hid_d = 8
@@ -87,7 +86,7 @@ for j in range(len(hid_d_s)):
                 tanh_coeff,
                 tr,
                 vl,
-                z_dim,  
+                z_dim,
                 hid_d,
                 hid_g,
                 checkpoint_epoch,
@@ -99,6 +98,42 @@ for j in range(len(hid_d_s)):
             results_df = pd.concat([results_df, df_temp], ignore_index=True)
             results_df.to_csv(resultsloc + resultsname)
 
+            print(f"Completed Processing (FinGAN Combos) for Ticker: {ticker}")
+
+            print("******************")
+            print(f"Processing Ticker (LSTM Combos): {ticker}")
+            print("******************")
+
+            e = FinGAN.LSTM_combos(
+                ticker,
+                loc,
+                modelsloc,
+                plotsloc,
+                dataloc,
+                etflistloc,
+                vl_later=True,
+                lrg=0.0001,
+                lrd=0.0001,
+                n_epochs=500,
+                ngrad=100,
+                h=1,
+                l=10,
+                pred=1,
+                ngpu=1,
+                tanh_coeff=100,
+                tr=0.8,
+                vl=0.1,
+                z_dim=32,
+                hid_d=64,
+                hid_g=1,
+                checkpoint_epoch=20,
+                batch_size=100,
+                diter=1,
+                plot=False,
+                freq=2
+            )
+
+            print(f"Completed Processing (LSTM Combos) for Ticker: {ticker}")
             print("*************")
 
 print("DONE")
