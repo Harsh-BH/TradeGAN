@@ -1,8 +1,7 @@
-import FinGAN
+import TradeGAN
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Hyperparameters and Configurations
 h = 1
 l = 10
 pred = 1
@@ -13,7 +12,7 @@ etflistloc = "/home/harsh/Hackathons/TradeGAN/stocks-etfs-list.csv"
 n_epochs = 100
 ngpu = 1
 
-loc = "/home/harsh/Hackathons/TradeGAN/Fin-GAN/"
+loc = "/home/harsh/Hackathons/TradeGAN/Trade-GAN/"
 modelsloc = loc + "TrainedModels/"
 plotsloc = loc + "Plots/"
 resultsloc = loc + "Results/"
@@ -23,36 +22,28 @@ z_dim = 8
 hid_d = 8
 hid_g = 8
 
-# Checkpoint and Batch Settings
 checkpoint_epoch = 20
 batch_size = 100
 diter = 1
 
-# Learning Rate Exploration
 lrg_s = [0.0001]
 lrd_s = [0.0001]
 hid_d_s = [8]
 hid_g_s = [8]
 nres = len(lrg_s)
 
-# Data Split Ratios
 tr = 0.8
 vl = 0.1
 ngrad = 100
 vl_later = True
 
-# Plot Configuration
 plot = False
 
-# Initial Data Structure for Results
 datastart = {'lrd': [], 'lrg': [], 'epochs': [], 'SR_val': []}
 results_df = pd.DataFrame(data=datastart)
-
-# Tickers to Analyze
 tickers = ['TCS']
 corrs = [False] * len(tickers)
 
-# Results Filename
 resultsname = "results.csv"
 plt.rcParams['figure.figsize'] = [15.75, 9.385]
 
@@ -67,7 +58,7 @@ for j in range(len(hid_d_s)):
             print(f"Processing Ticker: {ticker}")
             print("******************")
 
-            df_temp, corrs[tickern] = FinGAN.FinGAN_combos(
+            df_temp, corrs[tickern] = TradeGAN.FinGAN_combos(
                 ticker,
                 loc,
                 modelsloc,
@@ -104,7 +95,7 @@ for j in range(len(hid_d_s)):
             print(f"Processing Ticker (LSTM Combos): {ticker}")
             print("******************")
 
-            e = FinGAN.LSTM_combos(
+            e = TradeGAN.LSTM_combos(
                 ticker,
                 loc,
                 modelsloc,

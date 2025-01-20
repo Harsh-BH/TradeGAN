@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Oct 26 2023
-
-@author: vuletic@maths.ox.ac.uk
-
-
-"""
 
 import numpy as np
 import pandas as pd
@@ -19,25 +10,12 @@ import torch.optim as optim
 import numpy.random as rnd
 
 def ETF_find(etflistloc, stock):
-    """
-    reading a file containing information on stock memberships
-    input: stock ticker
-    output: corresponding ETF ticker
-    """
     data = pd.read_csv(etflistloc)
     out = np.array(data['ticker_y'][data['ticker_x']==stock])[0]
     return out
 
 
 def excessreturns_closeonly(dataloc, stock, etf, plotcheck = False):
-    """
-    function to get a time series of DAILY CLOSING
-    etf-excess log returns for a given stock
-    all prices are adjusted for stock events
-    input: location of datasets, stock ticker, etf ticker
-    output: time series of etf excess log returns
-    optional: plot sanity check
-    """
     s_df = pd.read_csv(dataloc+stock+".csv")
     e_df = pd.read_csv(dataloc+etf+".csv")
     dates_dt = pd.to_datetime(s_df['date'])
@@ -70,34 +48,8 @@ def excessreturns_closeonly(dataloc, stock, etf, plotcheck = False):
     return excessret, dates_dt[1:]
 
 def excessreturns(dataloc, stock, etf, plotcheck=False):
-    """
-    Generates a time series of ETF-excess log returns for a given stock.
-    The function computes alternating open and close log returns, caps extreme returns,
-    and optionally plots the data for sanity checks.
-
-    Parameters:
-    -----------
-    dataloc : str
-        Directory path where the CSV files are located. Ensure it ends with a '/'.
-    stock : str
-        Ticker symbol of the stock (e.g., 'TCS').
-    etf : str
-        Ticker symbol of the corresponding ETF (e.g., '^CNXIT').
-    plotcheck : bool, optional
-        If True, generates plots for the stock price and returns (default is False).
-
-    Returns:
-    --------
-    excessret : np.ndarray
-        Array of ETF-excess log returns.
-    dates_dt : pd.DatetimeIndex
-        Corresponding dates for the returns.
-    """
-
-    # Define the cutoff date
     cutoff_date = pd.Timestamp("2022-01-01")
 
-    # Read CSV files with date parsing for efficiency
     try:
         s_df = pd.read_csv(f"{dataloc}{stock}.csv", parse_dates=['date'])
     except FileNotFoundError:
@@ -108,7 +60,6 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
     except FileNotFoundError:
         raise FileNotFoundError(f"ETF file '{dataloc}{etf}.csv' not found.")
 
-    # Merge DataFrames on 'date' to ensure alignment
     merged_df = pd.merge(
         s_df[s_df['date'] < cutoff_date],
         e_df[e_df['date'] < cutoff_date],
@@ -116,17 +67,14 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
         suffixes=('_stock', '_etf')
     ).reset_index(drop=True)
 
-    # Check if merge was successful
     if merged_df.empty:
         raise ValueError(f"No overlapping dates found for stock '{stock}' and ETF '{etf}' before {cutoff_date}.")
 
-    # Extract necessary columns as NumPy arrays for efficient processing
     s_logclose = np.log(merged_df['AdjClose_stock'].values)
     e_logclose = np.log(merged_df['AdjClose_etf'].values)
     s_logopen = np.log(merged_df['AdjOpen_stock'].values)
     e_logopen = np.log(merged_df['AdjOpen_etf'].values)
 
-    # Interleave open and close log prices using vectorized operations
     s_log = np.empty(2 * len(s_logclose))
     e_log = np.empty(2 * len(e_logclose))
     s_log[0::2] = s_logopen
@@ -134,23 +82,18 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
     e_log[0::2] = e_logopen
     e_log[1::2] = e_logclose
 
-    # Calculate log returns
     s_ret = np.diff(s_log)
     e_ret = np.diff(e_log)
 
-    # Cap returns to mitigate the effect of outliers
     cap_value = 0.15
     s_ret = np.clip(s_ret, -cap_value, cap_value)
     e_ret = np.clip(e_ret, -cap_value, cap_value)
 
-    # Calculate ETF-excess returns
     excessret = s_ret - e_ret
 
-    # Align dates: since returns are based on differences, exclude the first date
     dates_dt = merged_df['date'].iloc[1:].reset_index(drop=True)
 
     if plotcheck:
-        # Plot Adjusted Close Price
         plt.figure(figsize=(14, 6))
         plt.plot(merged_df['date'], merged_df['AdjClose_stock'], label=f'{stock} AdjClose', color='blue')
         plt.title(f'{stock} Adjusted Close Price')
@@ -160,7 +103,6 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
         plt.grid(True)
         plt.show()
 
-        # Plot Returns
         plt.figure(figsize=(14, 6))
         plt.plot(dates_dt, s_ret, alpha=0.7, label='Stock Returns', color='green')
         plt.plot(dates_dt, e_ret, alpha=0.7, label='ETF Returns', color='orange')
@@ -175,13 +117,6 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
     return excessret, dates_dt
 
 def rawreturns(dataloc, stock, plotcheck = False):
-    """
-    function to get a time series of raw log returns for a given stock/etf
-    all prices are adjusted for stock events
-    input: location of datasets, stock ticker, etf ticker
-    output: time series of etf excess log returns
-    optional: plot sanity check
-    """
     s_df = pd.read_csv(dataloc+stock+".csv")
     dates_dt = pd.to_datetime(s_df['date'])
     d1 = pd.to_datetime("2022-01-01")
@@ -213,13 +148,7 @@ def rawreturns(dataloc, stock, plotcheck = False):
     return s_ret, dates_dt
 
 def split_train_val_test(stock, dataloc, etflistloc, tr = 0.8, vl = 0.1, h = 1, l = 10, pred = 1, plotcheck=False):
-    """
-    prepare etf excess log returns for a given stock
-    split into train, val, test
-    h: sliding window
-    l: condition window (number of previous values)
-    pred: prediction window
-    """
+
     etf = ETF_find(etflistloc, stock)
     excess_returns, dates_dt = excessreturns(dataloc, stock, etf, plotcheck)
     N = len(excess_returns)
@@ -259,13 +188,7 @@ def split_train_val_test(stock, dataloc, etflistloc, tr = 0.8, vl = 0.1, h = 1, 
     return train_data,val_data,test_data, dates_dt
 
 def split_train_testraw(stock, dataloc, tr = 0.8, vl = 0.1, h = 1, l = 10, pred = 1, plotcheck=False):
-    """
-    prepare raw log returns for a given stock
-    split into train, test
-    h: sliding window
-    l: condition window (number of previous values)
-    pred: prediction window
-    """
+
     excess_returns, dates_dt = rawreturns(dataloc, stock, plotcheck)
     N = len(excess_returns)
     N_tr = int(tr*N) + int(vl*N)
@@ -289,13 +212,7 @@ def split_train_testraw(stock, dataloc, tr = 0.8, vl = 0.1, h = 1, l = 10, pred 
 
 
 def split_train_val_testraw(stock, dataloc, tr = 0.8, vl = 0.1, h = 1, l = 10, pred = 1, plotcheck=False):
-    """
-    prepare raw log returns for a given stock
-    split into train, val, test
-    h: sliding window
-    l: condition window (number of previous values)
-    pred: prediction window
-    """
+
     excess_returns, dates_dt = rawreturns(dataloc, stock, plotcheck)
     N = len(excess_returns)
     N_tr = int(tr*N)
@@ -335,13 +252,7 @@ def split_train_val_testraw(stock, dataloc, tr = 0.8, vl = 0.1, h = 1, l = 10, p
 
 #LSTM ForGAN generator
 class Generator(nn.Module):
-    '''
-    Generator Class
-    Values:
-        noise_dim: the dimension of the noise, a scalar
-        cond_dim: the dimension of the condition, a scalar
-        hidden_dim: the inner dimension, a scalar
-    '''
+
     def __init__(self, noise_dim,cond_dim, hidden_dim,output_dim,mean,std):
         super(Generator, self).__init__()
         self.input_dim = noise_dim+cond_dim
@@ -366,9 +277,7 @@ class Generator(nn.Module):
 
 
     def forward(self, noise,condition,h_0,c_0):
-        '''
-        Function for completing a forward pass of the generator:adding the noise and the condition separately
-        '''
+
         #x = combine_vectors(noise.to(torch.float),condition.to(torch.float),2)
         condition = (condition-self.mean)/self.std
         out, (h_n, c_n) = self.lstm(condition, (h_0, c_0))
@@ -380,11 +289,6 @@ class Generator(nn.Module):
         return out
 
 class LSTM(nn.Module):
-    '''
-    Values:
-        cond_dim: the dimension of the condition, a scalar
-        hidden_dim: the inner dimension, a scalar
-    '''
     def __init__(self, noise_dim,cond_dim, hidden_dim,output_dim,mean,std):
         super(LSTM, self).__init__()
         self.input_dim = noise_dim+cond_dim
@@ -405,9 +309,7 @@ class LSTM(nn.Module):
 
 
     def forward(self, condition,h_0,c_0):
-        '''
-        Function for completing a forward pass of the generator:adding the noise and the condition separately
-        '''
+
         #x = combine_vectors(noise.to(torch.float),condition.to(torch.float),2)
         condition = (condition-self.mean)/self.std
         out, (h_n, c_n) = self.lstm(condition, (h_0, c_0))
@@ -418,12 +320,7 @@ class LSTM(nn.Module):
 
 #discriminator
 class Discriminator(nn.Module):
-    '''
-    Discriminator Class
-    Values:
-      in_dim: the input dimension (noise dim + conditin dim + forecast dim for the condition for this dataset), a scalar
-      hidden_dim: the inner dimension, a scalar
-    '''
+
     def __init__(self, in_dim, hidden_dim,mean,std):
         super(Discriminator, self).__init__()
         self.hidden_dim = hidden_dim
@@ -439,10 +336,6 @@ class Discriminator(nn.Module):
 
 
     def forward(self, in_chan,h_0,c_0):
-        '''
-        in_chan: concatenated condition with real or fake
-        h_0 and c_0: for the LSTM
-        '''
         x = in_chan
         x = (x-self.mean)/self.std
         out, (h_n, c_n) = self.lstm(x, (h_0, c_0))
@@ -451,35 +344,22 @@ class Discriminator(nn.Module):
         return out
 
 def combine_vectors(x, y,dim=-1):
-    '''
-    Function for combining two tensors
-    '''
     combined = torch.cat([x,y],dim=dim)
     combined = combined.to(torch.float)
     return combined
 
 def getPnL(predicted,real,nsamp):
-    """
-    PnL per trade given nsamp samples, predicted forecast, real data realisations
-    in bpts
-    """
     sgn_fake = torch.sign(predicted)
     PnL = torch.sum(sgn_fake*real)
     PnL = 10000*PnL/nsamp
     return PnL
 
 def getSR(predicted,real):
-    """
-    Sharpe Ratio given forecasts predicted of real (not annualised)
-    """
     sgn_fake = torch.sign(predicted)
     SR = torch.mean(sgn_fake * real) / torch.std(sgn_fake * real)
     return SR
 
 def Evaluation2(ticker,freq,gen,test_data, val_data, h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, losstype, sr_val, device, plotsloc, f_name, plot = False):
-    """
-    Evaluation of a GAN model on a single stock
-    """
     df_temp = False
     dt = {'lrd':lrd,'lrg':lrg,'type': losstype,'epochs':n_epochs, 'ticker':ticker,  'hid_g':hid_g, 'hid_d':hid_d}
     #print("Validation set best PnL (in bp): ",PnL_best)
@@ -656,9 +536,6 @@ def Evaluation2(ticker,freq,gen,test_data, val_data, h,l,pred,hid_d,hid_g, z_dim
     return df_temp, PnL_test, PnL_even, PnL_odd, means_gen, reals_test, distcheck_test, rl_test
 
 def Evaluation3(tickers,freq,gen,test, val, h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, losstype, sr_val, device, plotsloc, f_name, plot = False):
-    """
-    Evaluation of a GAN model in the universality setting (multiple tickers)
-    """
     df_temp = False
     dt = {'lrd':[],'lrg':[],'type': [],'epochs':[], 'ticker':[],  'hid_g':[], 'hid_d':[]}
     results_df = pd.DataFrame(data = dt)
@@ -844,9 +721,6 @@ def Evaluation3(tickers,freq,gen,test, val, h,l,pred,hid_d,hid_g, z_dim, lrg, lr
     return results_df, PnL_test, PnL_val, means_test, means_val
 
 def GradientCheck(ticker, gen, disc, gen_opt, disc_opt, criterion, n_epochs, train_data,batch_size,hid_d, hid_g, z_dim, lr_d = 0.0001, lr_g = 0.0001, h = 1, l = 10, pred = 1, diter =1, tanh_coeff = 100, device = 'cpu', plot = False):
-    """
-    Gradient norm check
-    """
     ntrain = train_data.shape[0]
     nbatches = ntrain//batch_size+1
     BCE_norm = torch.empty(nbatches*n_epochs, device = device)
@@ -1040,9 +914,6 @@ def GradientCheck(ticker, gen, disc, gen_opt, disc_opt, criterion, n_epochs, tra
 
 
 def TrainLoopForGAN(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data, batch_size,hid_d, hid_g, z_dim, lr_d = 0.0001, lr_g = 0.0001, h = 1, l = 10, pred = 1, diter =1, tanh_coeff = 100, device = 'cpu', plot = False):
-    """
-    Training loop for the BCE GAN (ForGAN)
-    """
     ntrain = train_data.shape[0]
     nbatches = ntrain//batch_size+1
     discloss = [False] * (nbatches*n_epochs)
@@ -1173,9 +1044,6 @@ def TrainLoopForGAN(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma,
     return gen, disc, gen_opt, disc_opt
 
 def TrainLoopMainPnLnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data, batch_size,hid_d, hid_g, z_dim, lr_d = 0.0001, lr_g = 0.0001, h = 1, l = 10, pred = 1, diter =1, tanh_coeff = 100, device = 'cpu', plot = False):
-    """
-    Training loop: PnL loss
-    """
     ntrain = train_data.shape[0]
     nval = validation_data.shape[0]
     nbatches = ntrain//batch_size+1
@@ -1315,9 +1183,6 @@ def TrainLoopMainPnLnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gam
     return gen, disc, gen_opt, disc_opt
 
 def TrainLoopMainPnLMSEnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data, batch_size,hid_d, hid_g, z_dim, lr_d = 0.0001, lr_g = 0.0001, h = 1, l = 10, pred = 1, diter =1, tanh_coeff = 100, device = 'cpu', plot=False):
-    """
-    Training loop: PnL and MSE loss
-    """
     ntrain = train_data.shape[0]
     nval = validation_data.shape[0]
     nbatches = ntrain//batch_size+1
@@ -1458,9 +1323,6 @@ def TrainLoopMainPnLMSEnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, 
     return gen, disc, gen_opt, disc_opt
 
 def TrainLoopMainPnLMSESRnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data, batch_size,hid_d, hid_g, z_dim, lr_d = 0.0001, lr_g = 0.0001, h = 1, l = 10, pred = 1, diter =1, tanh_coeff = 100, device = 'cpu', plot = False):
-    """
-    Training loop: PnL, MSE, SR loss
-    """
     ntrain = train_data.shape[0]
     nval = validation_data.shape[0]
     nbatches = ntrain//batch_size+1
@@ -1602,9 +1464,6 @@ def TrainLoopMainPnLMSESRnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta
     # print("PnL val (best):", PnL_best)
     return gen, disc, gen_opt, disc_opt
 def TrainLoopMainPnLMSESTDnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data, batch_size,hid_d, hid_g, z_dim, lr_d = 0.0001, lr_g = 0.0001, h = 1, l = 10, pred = 1, diter =1, tanh_coeff = 100, device = 'cpu', plot = False):
-    """
-    Training loop: PnL, MSE, STD loss
-    """
     ntrain = train_data.shape[0]
     nval = validation_data.shape[0]
     nbatches = ntrain//batch_size+1
@@ -3917,175 +3776,3 @@ def LSTM_combos(ticker,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later = T
 
     return results_df, corrm
 
-def FinGAN_universal(tickers1, other,loc,modelsloc,plotsloc,dataloc, etflistloc,  vl_later = True, lrg = 0.0001, lrd = 0.0001, n_epochs = 500, ngrad = 100, h = 1, l = 10, pred = 1, ngpu = 1, tanh_coeff = 100, tr = 0.8, vl = 0.1, z_dim = 32, hid_d = 64, hid_g = 8, checkpoint_epoch = 20, batch_size = 100, diter = 1, plot = False, freq = 2):
-    """
-    FinGAN loss combos in the universal setting
-    """
-    #initialise the networks first:
-    datastart = {'lrd':[],'lrg':[],'epochs':[],'SR_val':[]}
-    results_df = pd.DataFrame(data=datastart)
-    device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
-    ticker = tickers1[0]
-    train_data,val_data,test_data, dates_dt = split_train_val_test(ticker, dataloc, etflistloc,  tr, vl, h, l, pred, plot)
-    ntr = train_data.shape[0]
-    nvl = val_data.shape[0]
-    ntest = test_data.shape[0]
-    n_tickers1 = len(tickers1)
-    n_tickers = len(tickers1) + len(other)
-    train_data = np.zeros((ntr * n_tickers1, l + pred))
-    validation_data = [False] * n_tickers
-    test_data = [False] * n_tickers
-    for i in range(n_tickers1):
-        ticker = tickers1[i]
-        if ticker[0] == "X":
-            train,val,test, _ = split_train_val_testraw(ticker, dataloc,  tr, vl, h, l, pred, plot)
-        else:
-            train,val,test, _ = split_train_val_test(ticker, dataloc, etflistloc,  tr, vl, h, l, pred, plot)
-        data_tt = torch.from_numpy(test)
-        test_data[i] = data_tt.to(torch.float).to(device)
-        train_data[i*ntr:(i+1)*ntr] = train
-        data_tt = torch.from_numpy(val)
-        validation_data[i] = data_tt.to(torch.float).to(device)
-    data_tt = torch.from_numpy(train_data)
-    train_data = data_tt.to(torch.float).to(device)
-    for i in range(len(other)):
-        ticker = tickers1[i]
-        _,val,test, _ = split_train_val_test(ticker, dataloc, etflistloc,  tr, vl, h, l, pred, plot)
-        data_tt = torch.from_numpy(test)
-        test_data[i + n_tickers1] = data_tt.to(torch.float).to(device)
-        data_tt = torch.from_numpy(val)
-        validation_data[i + n_tickers1] = data_tt.to(torch.float).to(device)
-
-    tickers = np.concatenate((tickers1,other))
-    condition_size = l
-    target_size = pred
-    ref_mean = torch.mean(train_data[0:batch_size,:])
-    ref_std = torch.std(train_data[0:batch_size,:])
-    discriminator_indim = condition_size+target_size
-
-    gen = Generator(noise_dim=z_dim,cond_dim=condition_size, hidden_dim=hid_g,output_dim=pred,mean =ref_mean,std=ref_std)
-    gen.to(device)
-
-    disc = Discriminator(in_dim=discriminator_indim, hidden_dim=hid_d,mean=ref_mean,std=ref_std)
-    disc.to(device)
-
-    gen_opt = torch.optim.RMSprop(gen.parameters(), lr=lrg)
-    disc_opt = torch.optim.RMSprop(disc.parameters(), lr=lrd)
-
-    criterion = nn.BCELoss()
-    criterion = criterion.to(device)
-    gen, disc, gen_opt, disc_opt, alpha, beta, gamma, delta = GradientCheck(ticker, gen, disc, gen_opt, disc_opt, criterion, ngrad, train_data,batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-
-    f_name = modelsloc +  "vuniversal-"+str(n_epochs)+"-epochs-"+str(lrd)+"-lrd-"+str(lrg)+"-lrg"
-    f_name1 = ticker + "-universal-"+str(n_epochs)+"-epochs-"+str(lrd)+"-lrd-"+str(lrg)+"-lrg"
-
-    PnLs_test = [False] * 10
-    PnLs_val = [False] * 10
-    means_test = [False] * 10
-    means_val = [False] * 10
-    print("PnL")
-    losstype = "PnL"
-    genPnL, discPnL, gen_optPnL, disc_optPnL = TrainLoopMainPnLnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genPnL.state_dict()}, f_name + "PnL_generator_checkpoint.pth")
-    df_temp, PnLs_test[0], PnLs_val[0], means_test[0], means_val[0] = Evaluation3(tickers,freq,genPnL,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "PnL", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.title("Portfolio cummulative PnL " )
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[0]),label=losstype)
-    plt.grid(visible=True)
-    plt.ylabel("bpts")
-    plt.legend(loc='best')
-
-
-    print("PnL MSE")
-    genPnLMSE, discPnLMSE, gen_optPnLMSE, disc_optPnLMSE = TrainLoopMainPnLMSEnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genPnLMSE.state_dict()}, f_name + "PnLMSE_generator_checkpoint.pth")
-    df_temp, PnLs_test[1], PnLs_val[1], means_test[1], means_val[1] = Evaluation3(tickers,freq,genPnLMSE,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "PnL MSE", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "PnL MSE"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[1]),label=losstype)
-    plt.legend(loc='best')
-
-    print("PnL MSE STD")
-    genPnLMSESTD, discPnLMSESTD, gen_optPnLMSESTD, disc_optPnLMSESTD = TrainLoopMainPnLMSESTDnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genPnLMSESTD.state_dict()}, f_name + "PnLMSESTD_generator_checkpoint.pth")
-    df_temp, PnLs_test[2], PnLs_val[2], means_test[2], means_val[2]= Evaluation3(tickers,freq,genPnLMSESTD,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "PnL MSE STD", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "PnL MSE STD"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[2]),label=losstype)
-    plt.legend(loc='best')
-
-    print("PnL MSE SR")
-    genPnLMSESR, discPnLMSESR, gen_optPnLMSESR, disc_optPnLMSESR = TrainLoopMainPnLMSESRnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genPnLMSESR.state_dict()}, f_name + "PnLMSESR_generator_checkpoint.pth")
-    df_temp, PnLs_test[3], PnLs_val[3], means_test[3], means_val[3] = Evaluation3(tickers,freq,genPnLMSESR,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "PnL MSE SR", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "PnL MSE SR"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[3]),label=losstype)
-    plt.legend(loc='best')
-
-    print("PnL SR")
-    genPnLSR, discPnLSR, gen_optPnLSR, disc_optPnLSR = TrainLoopMainPnLSRnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genPnLSR.state_dict()}, f_name + "PnLSR_generator_checkpoint.pth")
-    df_temp, PnLs_test[4], PnLs_val[4], means_test[4], means_val[4] = Evaluation3(tickers,freq,genPnLSR,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "PnL SR", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "PnL SR"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[4]),label=losstype)
-    plt.legend(loc='best')
-
-    print("PnL STD")
-    genPnLSTD, discPnLSTD, gen_optPnLSTD, disc_optPnLSTD = TrainLoopMainPnLSTDnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genPnLSR.state_dict()}, f_name + "PnLSTD_generator_checkpoint.pth")
-    df_temp, PnLs_test[5], PnLs_val[5], means_test[5], means_val[5] = Evaluation3(tickers,freq,genPnLSTD,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "PnL STD", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "PnL STD"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[5]),label=losstype)
-    plt.legend(loc='best')
-
-    print("SR")
-    genSR, discSR, gen_optSR, disc_optSR = TrainLoopMainSRnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genPnLSR.state_dict()}, f_name + "SR_generator_checkpoint.pth")
-    df_temp, PnLs_test[6], PnLs_val[6], means_test[6], means_val[6] = Evaluation3(tickers,freq,genSR,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "SR", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "SR"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[6]),label=losstype)
-    plt.legend(loc='best')
-
-    print("SR MSE")
-    genSRMSE, discSRMSE, gen_optSRMSE, disc_optSRMSE = TrainLoopMainSRMSEnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genSRMSE.state_dict()}, f_name + "SRMSE_generator_checkpoint.pth")
-    df_temp, PnLs_test[7], PnLs_val[7], means_test[7], means_val[7] = Evaluation3(tickers,freq,genSRMSE,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "SR MSE", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "SR MSE"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[7]),label=losstype)
-    plt.legend(loc='best')
-
-    print("MSE")
-    genMSE, discMSE, gen_optMSE, disc_optMSE = TrainLoopMainMSEnv(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genMSE.state_dict()}, f_name + "MSE_generator_checkpoint.pth")
-    df_temp, PnLs_test[8], PnLs_val[8], means_test[8], means_val[8] = Evaluation3(tickers,freq,genMSE,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "MSE", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "MSE"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[8]),label=losstype)
-    plt.legend(loc='best')
-
-    print("ForGAN")
-    genFG, discFG, gen_optFG, disc_optFG = TrainLoopForGAN(gen, disc, gen_opt, disc_opt, criterion, alpha, beta, gamma, delta, n_epochs, checkpoint_epoch, train_data, validation_data[0], batch_size,hid_d, hid_g, z_dim, lrd, lrg, h, l, pred, diter, tanh_coeff, device, plot)
-    torch.save({'g_state_dict': genFG.state_dict()}, f_name + "ForGAN_generator_checkpoint.pth")
-    df_temp, PnLs_test[9], PnLs_val[9], means_test[9], means_val[9] = Evaluation3(tickers,freq,genFG,test_data,validation_data,h,l,pred,hid_d,hid_g, z_dim, lrg, lrd, n_epochs, "ForGAN", 0, device, plotsloc, f_name1)
-    results_df = pd.concat([results_df,df_temp], ignore_index=True)
-    losstype = "BCE"
-    plt.figure(" portfolio cumPnL- "+ f_name)
-    plt.plot(dates_dt[-int(ntest/2):], np.cumsum(PnLs_test[9]),label=losstype)
-    plt.legend(loc='best')
-    plt.savefig(plotsloc+"UniversalPnLCumm.png")
-
-    return results_df, PnLs_test, PnLs_val, means_test, means_val
