@@ -12,7 +12,7 @@ etflistloc = "/home/harsh/Hackathons/TradeGAN/stocks-etfs-list.csv"
 n_epochs = 100
 ngpu = 1
 
-loc = "/home/harsh/Hackathons/TradeGAN/Trade-GAN/"
+loc = "/home/harsh/Hackathons/TradeGAN/Trade-GAN_results/"
 modelsloc = loc + "TrainedModels/"
 plotsloc = loc + "Plots/"
 resultsloc = loc + "Results/"
