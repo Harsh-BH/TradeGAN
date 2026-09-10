@@ -110,8 +110,16 @@ TradeGAN.pdf           write-up; predates this README and its framing is correct
 
 ## Data
 
-No market data is redistributed here. `stocks-etfs-list.csv` is ticker metadata only;
-prices are fetched at runtime via `yfinance` into a gitignored `data/` directory.
+`stocks-etfs-list.csv` is ticker → sector-index metadata only (200 data rows, no price
+columns), and prices are fetched at runtime via `yfinance` into a gitignored `data/`
+directory that is absent from git's index.
+
+One exception, disclosed rather than glossed: **`trash.ipynb` does redistribute a small
+fragment of real market data.** It holds only 143 characters of source but 3.3 KB of
+saved cell *output*, including a truncated DataFrame repr with genuine ZENSARTECH.NS
+dates and Adj Open/Close prices spanning 2010-01-04 to 2021-12-30. The notebook is
+tracked and not gitignored, so "this repo redistributes no market data" would be false
+as an absolute claim.
 
 ## Reference
 
